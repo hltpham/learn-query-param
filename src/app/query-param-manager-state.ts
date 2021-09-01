@@ -8,7 +8,6 @@ export class QueryParamManagerState {
   private parent: QueryParamManagerService;
   private formControls: [FormControl, string][] = [];
   private stop$: Observable<any>;
-  private stopOperator: (source: Observable<any>) => Observable<any>;
 
   public addFormControl(
     formControl: FormControl,
@@ -22,7 +21,7 @@ export class QueryParamManagerState {
     stop$: Observable<any> | ((source: Observable<any>) => Observable<any>)
   ): QueryParamManagerState {
     if (typeof stop$ === 'function') {
-      this.stopOperator = stop$;
+      // skip functional stop operator
     } else {
       this.stop$ = stop$;
     }
@@ -30,7 +29,7 @@ export class QueryParamManagerState {
   }
 
   public sync() {
-    if (!this.stop$ && !this.stopOperator) {
+    if (!this.stop$) {
       throw new Error(
         // tslint:disable-next-line
         'You must pass an observable or operator to the `takeUntil` method before you can sync query params with the MtrQueryParamManager.'
@@ -39,10 +38,8 @@ export class QueryParamManagerState {
     // Add the state item with a unique id
     this.parent['addStateItem'](this.id, this);
     // Remove the state item when takeUntil emits or the observable is completed
-    (this.stop$
-      ? this.stop$
-      : new Subject().pipe(this.stopOperator).pipe(take(1))
-    )
+    this.stop$
+
       .pipe(
         take(1),
         finalize(() => {

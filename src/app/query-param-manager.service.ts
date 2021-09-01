@@ -2,7 +2,7 @@ import { Injectable } from '@angular/core';
 import { FormControl } from '@angular/forms';
 import { ActivatedRoute, NavigationEnd, Params, Router } from '@angular/router';
 import { BehaviorSubject, combineLatest, Observable } from 'rxjs';
-import { delay, distinctUntilChanged, filter, map, startWith, take, tap } from 'rxjs/operators';
+import { debounceTime, delay, distinctUntilChanged, filter, map, shareReplay, startWith, switchMap, take, tap } from 'rxjs/operators';
 import { QueryParamManagerState } from './query-param-manager-state';
 
 @Injectable()
@@ -24,9 +24,31 @@ export class QueryParamManagerService {
         delay(0),
         tap((queryParams: Params) => {
           stateItems.forEach(item => {
-            Object.entries(queryParams)
+            Object.entries(queryParams).forEach(param => {
+              this.syncFormControls(item['formControls'], param)
+            });
           }) 
-        })
+        }),
+        switchMap(() => {
+          return combineLatest([
+            this.router.events.pipe(
+              filter(event => event instanceof NavigationEnd),
+              switchMap(() => this.skipRouterEvents$.pipe(take(1))),
+              filter((doSkip) => !doSkip),
+              startWith(true),
+              map(() => [])
+            ),
+            ...Array.from(stateItems.values()).map(item => 
+              combineLatest([
+                ...this.composeFormControlObservables(item['formControls'])
+              ]).pipe(
+                stateItems['stop$'] 
+              )
+              )
+          ])
+        }),
+        debounceTime(180),
+        shareReplay(1)
       )
     })
   )
@@ -46,14 +68,14 @@ export class QueryParamManagerService {
         });
     }
 
-    // // Listens for param changes and syncs changes accordingly
-    // this.params$.subscribe((props) => {
-    //   this.skipRouterEvents$.next(true);
-    //   this.syncPropsToQueryParams(props);
-    //   setTimeout(() => {
-    //     this.skipRouterEvents$.next(false);
-    //   });
-    // });
+    // Listens for param changes and syncs changes accordingly
+    this.params$.subscribe((props) => {
+      this.skipRouterEvents$.next(true);
+      this.syncPropsToQueryParams(props);
+      setTimeout(() => {
+        this.skipRouterEvents$.next(false);
+      });
+    });
   }
 
   public addFormControl(
