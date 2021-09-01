@@ -14,7 +14,7 @@ export class QueryParamManagerService {
   private initialized$ = new BehaviorSubject<boolean>(false);
   private uniqueStateId = 0;
 
-  private params$ = combineLatest([
+  public params$ = combineLatest([
     this.stateItems,
     this.initialized$.pipe(filter((init) => !!init)),
   ]).pipe(
